@@ -9,6 +9,8 @@ import pytest
 
 from mcp_server.tools.system import DoctorContext
 from mcp_server.tools.ui import UIContext
+from mcp_server.tools.network import NetworkContext
+from mcp_server.tools.state import StateContext
 from tests.helpers import MockJavaVersionResult
 
 TEST_DEVICE_SERIAL = "emulator-5554"
@@ -33,6 +35,46 @@ class MockSDKGateway:
 
     def is_connected(self) -> bool:
         return self.connected
+
+
+@dataclass(slots=True)
+class MockNetworkGateway:
+    """Mock implementation of NetworkGateway for unit tests."""
+
+    connected: bool = True
+    traces: list[dict] = field(default_factory=list)
+
+    def is_connected(self) -> bool:
+        return self.connected
+
+    def get_network_traces(self, filter: str | None = None) -> list[dict]:
+        if filter is None:
+            return list(self.traces)
+        f_lower = filter.lower()
+        return [
+            t
+            for t in self.traces
+            if f_lower in t.get("request", {}).get("url", "").lower()
+            or f_lower == t.get("request", {}).get("method", "").lower()
+        ]
+
+
+@dataclass(slots=True)
+class MockStateGateway:
+    """Mock implementation of StateGateway for unit tests."""
+
+    connected: bool = True
+    states: dict = field(default_factory=dict)
+
+    def is_connected(self) -> bool:
+        return self.connected
+
+    def get_viewmodel_states(self, class_name: str | None = None) -> dict:
+        if class_name:
+            if class_name in self.states:
+                return {class_name: self.states[class_name]}
+            return {}
+        return dict(self.states)
 
 
 @dataclass(slots=True)
@@ -142,4 +184,43 @@ def doctor_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DoctorCon
     return DoctorContext(adb=adb, roots_provider=lambda: [str(project_root)], env={"ANDROID_HOME": "/sdk"})
 
 
-__all__ = ["MockAdb", "MockDevice", "MockSDKGateway", "MockJavaVersionResult"]
+@pytest.fixture
+def network_trace() -> dict:
+    return {
+        "timestamp": 1717123456789,
+        "request": {
+            "method": "POST",
+            "url": "https://api.example.com/login",
+            "headers": {"Content-Type": "application/json"},
+            "body": {"user": "admin", "password": "***MASKED***"},
+        },
+        "response": {"status": 200, "body": {"token": "***MASKED***"}},
+        "latency_ms": 450,
+    }
+
+
+@pytest.fixture
+def network_context(network_trace: dict) -> NetworkContext:
+    gw = MockNetworkGateway(connected=True, traces=[network_trace])
+    return NetworkContext(gateway=gw)
+
+
+@pytest.fixture
+def state_context() -> StateContext:
+    gw = MockStateGateway(
+        connected=True,
+        states={
+            "LoginViewModel": {"isLoading": False, "error": None, "user": {"id": 1, "name": "Admin"}},
+        },
+    )
+    return StateContext(gateway=gw)
+
+
+__all__ = [
+    "MockAdb",
+    "MockDevice",
+    "MockSDKGateway",
+    "MockNetworkGateway",
+    "MockStateGateway",
+    "MockJavaVersionResult",
+]
