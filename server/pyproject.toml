@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "android-deep-debugger-mcp-server"
+version = "0.1.0"
+description = "Universal Android Deep Debugger MCP Server"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp[cli]",
+  "pydantic>=2,<3",
+  "uiautomator2",
+  "pytest",
+  "pytest-asyncio",
+  "websockets",
+]
+
+[project.scripts]
+android-debugger-mcp = "mcp_server.main:run"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mcp_server*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

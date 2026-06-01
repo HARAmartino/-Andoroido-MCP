@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+android_deep_debugger_mcp_server.egg-info/PKG-INFO
+android_deep_debugger_mcp_server.egg-info/SOURCES.txt
+android_deep_debugger_mcp_server.egg-info/dependency_links.txt
+android_deep_debugger_mcp_server.egg-info/entry_points.txt
+android_deep_debugger_mcp_server.egg-info/requires.txt
+android_deep_debugger_mcp_server.egg-info/top_level.txt
+mcp_server/__init__.py
+mcp_server/main.py
+mcp_server/tools/__init__.py
+mcp_server/tools/system.py
+mcp_server/tools/ui.py
+tests/test_main.py
+tests/test_system.py
+tests/test_ui.py
