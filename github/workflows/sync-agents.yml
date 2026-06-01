@@ -1,0 +1,39 @@
+name: Sync AGENTS.md to Copilot Instructions
+
+on:
+  push:
+    paths:
+      - 'AGENTS.md'
+      - '.github/copilot-instructions.md'
+  workflow_dispatch: # 手動実行用ボタンも追加
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # リポジトリへの書き込み権限を付与
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync files (AGENTS.md -> copilot-instructions.md)
+        run: |
+          mkdir -p .github
+          echo "<!-- AUTO-GENERATED FILE: DO NOT EDIT DIRECTLY -->" > .github/copilot-instructions.md
+          echo "<!-- Synchronized from AGENTS.md via GitHub Actions -->" >> .github/copilot-instructions.md
+          echo "" >> .github/copilot-instructions.md
+          cat AGENTS.md >> .github/copilot-instructions.md
+
+      - name: Commit and Push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/copilot-instructions.md
+          
+          # 差分がある場合のみコミットして無限ループを回避
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: sync copilot-instructions from AGENTS.md [skip ci]"
+            git push
+          else
+            echo "No changes to sync."
+          fi
