@@ -139,4 +139,4 @@ def interact_and_observe(
         ]
     )
 
-    return {"text": report}
+    return {"text": report, "success": action_result == "✅ Success"}

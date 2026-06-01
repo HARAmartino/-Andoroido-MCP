@@ -16,7 +16,7 @@ from mcp_server.tools.build import (
     ensure_adb_reverse_on_startup,
 )
 from mcp_server.tools.crash import CrashContext, get_crash_context as run_get_crash_context
-from mcp_server.tools.fuzz import FuzzContext, start_fuzzing as run_start_fuzzing
+from mcp_server.tools.fuzz import FuzzContext, FuzzStrategy, start_fuzzing as run_start_fuzzing
 from mcp_server.tools.ide import ide_evaluate as run_ide_evaluate
 from mcp_server.tools.ide import ide_set_breakpoint as run_ide_set_breakpoint
 from mcp_server.tools.network import NetworkContext, inspect_network as run_inspect_network
@@ -111,7 +111,7 @@ def interact_and_observe(
             "action": action,
             "selector": selector,
             "value": value,
-            "status": "success" if "✅ Success" in result.get("text", "") else "failure",
+            "status": "success" if result.get("success", False) else "failure",
         }
     )
     return result
@@ -170,7 +170,7 @@ def get_crash_context() -> dict[str, Any]:
 
 
 @mcp.tool()
-def start_fuzzing(duration_sec: int, strategy: str = "random") -> dict[str, Any]:
+def start_fuzzing(duration_sec: int, strategy: FuzzStrategy = "random") -> dict[str, Any]:
     """Run autonomous UI fuzzing and stop immediately on crash/ANR."""
     ui_context = _default_ui_context()
     return run_start_fuzzing(
@@ -185,7 +185,7 @@ def start_fuzzing(duration_sec: int, strategy: str = "random") -> dict[str, Any]
             record_action=history_store.add_action,
         ),
         duration_sec=duration_sec,
-        strategy=strategy,  # type: ignore[arg-type]
+        strategy=strategy,
     )
 
 

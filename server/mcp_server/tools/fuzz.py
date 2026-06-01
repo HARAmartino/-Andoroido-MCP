@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import random
 import time
+import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Protocol
@@ -10,6 +11,8 @@ from typing import Any, Callable, Literal, Protocol
 from mcp_server.tools.crash import CrashContext, contains_crash_signature, get_crash_context
 
 FuzzStrategy = Literal["random", "guided"]
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_DIALOG_KEYWORDS: tuple[str, ...] = (
     "permission",
@@ -20,6 +23,11 @@ SYSTEM_DIALOG_KEYWORDS: tuple[str, ...] = (
     "com.android",
     "android.permissioncontroller",
 )
+# Guided strategy uses cumulative probabilities:
+# click: [0.00, 0.75), scroll: [0.75, 0.95), swipe: [0.95, 1.00].
+GUIDED_CLICK_PROB = 0.75
+GUIDED_SCROLL_UPPER_PROB = 0.95
+GUIDED_SWIPE_PROB = 1.0 - GUIDED_SCROLL_UPPER_PROB
 
 
 class FuzzDevice(Protocol):
@@ -76,7 +84,13 @@ def _pick_action(
         return ("scroll", "root")
     selector = rng.choice(selectors)
     if strategy == "guided":
-        action = rng.choices(["click", "scroll", "swipe"], weights=[0.75, 0.2, 0.05], k=1)[0]
+        roll = rng.random()
+        if roll < GUIDED_CLICK_PROB:
+            action = "click"
+        elif roll < GUIDED_SCROLL_UPPER_PROB:
+            action = "scroll"
+        else:
+            action = "swipe"
     else:
         action = rng.choice(["click", "scroll", "swipe"])
     return (action, selector)
@@ -116,8 +130,9 @@ def start_fuzzing(
         try:
             _run_action(context.device, action, selector)
             action_status = "success"
-        except (RuntimeError, ValueError):
+        except RuntimeError as exc:
             action_status = "failure"
+            logger.debug("fuzz action failed: action=%s selector=%s error=%s", action, selector, exc)
 
         if context.record_action:
             context.record_action(
@@ -148,4 +163,3 @@ def start_fuzzing(
         "strategy": strategy,
         "iterations": iterations,
     }
-

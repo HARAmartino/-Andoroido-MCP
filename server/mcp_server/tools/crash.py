@@ -8,6 +8,8 @@ from typing import Any, Protocol
 from mcp_server.sdk_bridge import sanitize_log
 
 CRASH_MARKERS: tuple[str, ...] = ("FATAL EXCEPTION", " ANR in ")
+# Use 40 lines to keep stack traces compact for agent context while preserving
+# enough frames to diagnose typical Android crash call chains.
 STACK_TRACE_LIMIT = 40
 
 
@@ -20,7 +22,7 @@ class HistoryProvider(Protocol):
 
 
 class NetworkGateway(Protocol):
-    def get_network_traces(self, filter: str | None = None) -> list[dict[str, Any]]: ...
+    def get_network_traces(self, filter_value: str | None = None) -> list[dict[str, Any]]: ...
 
     def is_connected(self) -> bool: ...
 
@@ -86,7 +88,8 @@ def get_crash_context(
     if context.state_gateway and context.state_gateway.is_connected():
         viewmodel_state = context.state_gateway.get_viewmodel_states()
 
-    stack_text = "\n".join(stack_lines) if stack_lines else "No crash or ANR signature found in recent logcat window."
+    safe_stack_lines = sanitize_log(stack_lines)
+    stack_text = "\n".join(safe_stack_lines) if safe_stack_lines else "No crash or ANR signature found in recent logcat window."
 
     report = "\n".join(
         [
@@ -120,10 +123,9 @@ def get_crash_context(
     return {
         "status": "crash_detected" if crash_index is not None else "no_crash_detected",
         "crash_detected": crash_index is not None,
-        "stack_trace": stack_lines,
-        "ui_actions": ui_actions,
-        "network_traces": network_traces,
-        "viewmodel_state": viewmodel_state,
-        "text": sanitize_log(report),
+        "stack_trace": safe_stack_lines,
+        "ui_actions": sanitize_log(ui_actions),
+        "network_traces": sanitize_log(network_traces),
+        "viewmodel_state": sanitize_log(viewmodel_state),
+        "text": report,
     }
-

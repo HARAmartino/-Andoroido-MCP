@@ -4,6 +4,9 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
+# SPEC-aligned bounded in-memory session history to prevent unbounded growth.
+# When full, deque(maxlen=...) automatically drops the oldest entries first.
+# 500 keeps enough interaction context for crash triage while remaining lightweight.
 MAX_HISTORY = 500
 
 
@@ -24,4 +27,3 @@ class SessionHistoryStore:
 
 
 history_store = SessionHistoryStore()
-

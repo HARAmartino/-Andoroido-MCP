@@ -8,7 +8,7 @@ from mcp_server.sdk_bridge import sanitize_log
 
 
 def _json_block(data: Any) -> str:  # noqa: ANN401
-    return json.dumps(sanitize_log(data), ensure_ascii=False, indent=2)
+    return json.dumps(data, ensure_ascii=False, indent=2)
 
 
 def generate_bug_report(
@@ -46,5 +46,4 @@ def generate_bug_report(
         )
 
     markdown = "\n".join(lines).strip()
-    return {"title": title, "text": sanitize_log(markdown)}
-
+    return {"title": title, "text": markdown}
