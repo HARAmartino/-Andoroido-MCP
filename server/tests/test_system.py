@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from mcp_server.tools.system import DoctorContext, doctor
+from tests.helpers import MockJavaVersionResult
 
 
 def test_doctor_report_includes_required_checks(doctor_context: DoctorContext) -> None:
@@ -24,13 +25,12 @@ def test_doctor_handles_no_connected_device(monkeypatch) -> None:
                 return "List of devices attached\n"
             raise AssertionError(args)
 
-    class JavaVersionResult:
-        stderr = 'openjdk version "17.0.9"\n'
+    def mock_subprocess_run(*args, **_kwargs):
+        if list(args[0]) != ["java", "-version"]:
+            raise AssertionError(f"Unexpected subprocess call: {args[0]}")
+        return MockJavaVersionResult()
 
-    monkeypatch.setattr(
-        "mcp_server.tools.system.subprocess.run",
-        lambda *args, **kwargs: JavaVersionResult(),
-    )
+    monkeypatch.setattr("mcp_server.tools.system.subprocess.run", mock_subprocess_run)
 
     report = doctor(DoctorContext(adb=NoDeviceAdb(), roots_provider=lambda: [], env={}))
 

@@ -7,6 +7,8 @@ import xml.etree.ElementTree as ET
 
 ActionType = Literal["click", "long_click", "input", "swipe", "scroll"]
 UIFormat = Literal["json", "xml", "summary"]
+DEFAULT_LOG_WINDOW_MS = 500
+DEFAULT_LOG_LINES = 10
 
 
 class DeviceClient(Protocol):
@@ -95,6 +97,8 @@ def _run_action(context: UIContext, action: ActionType, selector: str, value: st
         context.device.swipe(selector)
     elif action == "scroll":
         context.device.scroll(selector)
+    else:
+        raise ValueError(f"UnsupportedAction: {action}")
 
 
 def interact_and_observe(
@@ -116,13 +120,13 @@ def interact_and_observe(
     try:
         _run_action(context, action, selector, value)
         action_result = "✅ Success"
-    except Exception as exc:  # noqa: BLE001 - returned as tool output
-        action_result = f"❌ Failure: {exc}"
+    except (ValueError, RuntimeError) as exc:
+        action_result = f"❌ Failure: {action} on '{selector}' - {exc}"
 
     after_xml = context.device.dump_hierarchy()
     ui_diff = "UI changed" if before_xml != after_xml else "No UI change detected"
-    logs = context.device.get_recent_logs(window_ms=500)
-    log_snippet = "\n".join(f"- {line}" for line in logs[-10:]) if logs else "- (no logs)"
+    logs = context.device.get_recent_logs(window_ms=DEFAULT_LOG_WINDOW_MS)
+    log_snippet = "\n".join(f"- {line}" for line in logs[-DEFAULT_LOG_LINES:]) if logs else "- (no logs)"
 
     report = "\n".join(
         [

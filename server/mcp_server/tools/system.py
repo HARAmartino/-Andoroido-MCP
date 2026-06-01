@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
 
+PRIVATE_SPACE_USER_ID = 10
+ANDROID_15_SDK_VERSION = 35
+
 
 class AdbClient(Protocol):
     def run(self, *args: str) -> str:
@@ -25,10 +28,14 @@ class SubprocessAdb:
         return completed.stdout.strip()
 
 
+def _empty_roots_provider() -> list[str]:
+    return []
+
+
 @dataclass(slots=True)
 class DoctorContext:
     adb: AdbClient = field(default_factory=SubprocessAdb)
-    roots_provider: Callable[[], list[str]] = field(default_factory=lambda: (lambda: []))
+    roots_provider: Callable[[], list[str]] = _empty_roots_provider
     env: dict[str, str] = field(default_factory=lambda: dict(os.environ))
 
 
@@ -48,7 +55,10 @@ def _parse_first_connected_device(devices_output: str) -> str | None:
 
 
 def _private_space_detected(dumpsys_output: str) -> bool:
-    return "UserInfo{10:" in dumpsys_output or "serialNo=10" in dumpsys_output
+    return (
+        f"UserInfo{{{PRIVATE_SPACE_USER_ID}:" in dumpsys_output
+        or f"serialNo={PRIVATE_SPACE_USER_ID}" in dumpsys_output
+    )
 
 
 def doctor(context: DoctorContext | None = None) -> str:
@@ -99,7 +109,7 @@ def doctor(context: DoctorContext | None = None) -> str:
         android_sdk = ctx.adb.run("-s", serial, "shell", "getprop", "ro.build.version.sdk")
         sdk_value = int(android_sdk.strip() or "0")
         lines.append(f"- android version: ✅ {android_release} (SDK {sdk_value})")
-        if sdk_value >= 35:
+        if sdk_value >= ANDROID_15_SDK_VERSION:
             lines.append("- android 15+ check: ⚠️ Android 15+ detected. Verify Private Space constraints.")
 
         dumpsys_user = ctx.adb.run("-s", serial, "shell", "dumpsys", "user")

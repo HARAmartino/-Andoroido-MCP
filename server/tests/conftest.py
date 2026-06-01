@@ -3,11 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import xml.etree.ElementTree as ET
 
 import pytest
 
 from mcp_server.tools.system import DoctorContext
 from mcp_server.tools.ui import UIContext
+from tests.helpers import MockJavaVersionResult
+
+TEST_DEVICE_SERIAL = "emulator-5554"
 
 
 @dataclass(slots=True)
@@ -37,37 +41,59 @@ class MockDevice:
     logs: list[str] = field(default_factory=list)
 
     def click(self, selector: str) -> None:
-        self._require(selector)
-        self.current_xml = self.current_xml.replace('text="Login"', 'text="Login successful"')
+        self._ensure_element_present(selector)
+        root = ET.fromstring(self.current_xml)
+        for node in root.iter("node"):
+            resource_id = node.attrib.get("resource-id", "")
+            if resource_id.endswith("btn_login"):
+                node.set("text", "Login successful")
+                break
+        self.current_xml = ET.tostring(root, encoding="unicode")
         self.logs.append("I ActivityManager: click(Login)")
 
     def long_click(self, selector: str) -> None:
-        self._require(selector)
+        self._ensure_element_present(selector)
         self.logs.append("I ActivityManager: long_click")
 
     def input_text(self, selector: str, value: str) -> None:
-        self._require(selector)
-        self.current_xml = self.current_xml.replace('text=""', f'text="{value}"')
+        self._ensure_element_present(selector)
+        root = ET.fromstring(self.current_xml)
+        for node in root.iter("node"):
+            resource_id = node.attrib.get("resource-id", "")
+            if resource_id.endswith(selector) or resource_id == selector:
+                node.set("text", value)
+                break
+        self.current_xml = ET.tostring(root, encoding="unicode")
         self.logs.append(f"I InputMethod: set_text({selector})")
 
     def swipe(self, selector: str) -> None:
-        self._require(selector)
+        self._ensure_element_present(selector)
         self.logs.append("I ViewRootImpl: swipe")
 
     def scroll(self, selector: str) -> None:
-        self._require(selector)
+        self._ensure_element_present(selector)
         self.logs.append("I ViewRootImpl: scroll")
 
     def dump_hierarchy(self) -> str:
         return self.current_xml
 
     def get_recent_logs(self, window_ms: int = 500) -> list[str]:
-        del window_ms
+        _ = window_ms
         return list(self.logs)
 
-    def _require(self, selector: str) -> None:
-        if selector not in self.current_xml:
-            raise ValueError(f"ElementNotFound: {selector}")
+    def _ensure_element_present(self, selector: str) -> None:
+        root = ET.fromstring(self.current_xml)
+        for node in root.iter("node"):
+            resource_id = node.attrib.get("resource-id", "")
+            text = node.attrib.get("text", "")
+            content_desc = node.attrib.get("content-desc", "")
+            if selector in {resource_id, text, content_desc}:
+                return
+            if resource_id.split("/")[-1] == selector:
+                return
+            if ":id/" in resource_id and resource_id.split(":id/", maxsplit=1)[-1] == selector:
+                return
+        raise ValueError(f"ElementNotFound: {selector}")
 
 
 @pytest.fixture
@@ -99,22 +125,21 @@ def doctor_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DoctorCon
     adb = MockAdb(
         responses={
             ("version",): "Android Debug Bridge version 1.0.41",
-            ("devices",): "List of devices attached\nemulator-5554\tdevice",
-            ("-s", "emulator-5554", "shell", "getprop", "ro.build.version.release"): "15",
-            ("-s", "emulator-5554", "shell", "getprop", "ro.build.version.sdk"): "35",
-            ("-s", "emulator-5554", "shell", "dumpsys", "user"): "UserInfo{0:Owner} UserInfo{10:Private}",
+            ("devices",): f"List of devices attached\n{TEST_DEVICE_SERIAL}\tdevice",
+            ("-s", TEST_DEVICE_SERIAL, "shell", "getprop", "ro.build.version.release"): "15",
+            ("-s", TEST_DEVICE_SERIAL, "shell", "getprop", "ro.build.version.sdk"): "35",
+            ("-s", TEST_DEVICE_SERIAL, "shell", "dumpsys", "user"): "UserInfo{0:Owner} UserInfo{10:Private}",
         }
     )
 
-    class JavaVersionResult:
-        stderr = 'openjdk version "17.0.9"\n'
+    def mock_subprocess_run(*args, **_kwargs):
+        if list(args[0]) != ["java", "-version"]:
+            raise AssertionError(f"Unexpected subprocess call: {args[0]}")
+        return MockJavaVersionResult()
 
-    monkeypatch.setattr(
-        "mcp_server.tools.system.subprocess.run",
-        lambda *args, **kwargs: JavaVersionResult(),
-    )
+    monkeypatch.setattr("mcp_server.tools.system.subprocess.run", mock_subprocess_run)
 
     return DoctorContext(adb=adb, roots_provider=lambda: [str(project_root)], env={"ANDROID_HOME": "/sdk"})
 
 
-__all__ = ["MockAdb", "MockDevice", "MockSDKGateway"]
+__all__ = ["MockAdb", "MockDevice", "MockSDKGateway", "MockJavaVersionResult"]
