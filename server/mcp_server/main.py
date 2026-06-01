@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp_server.sdk_bridge import bridge
 from mcp_server.tools.build import (
     BuildContext,
+    SDK_BRIDGE_PORT,
     build_and_deploy as run_build_and_deploy,
     ensure_adb_reverse_on_startup,
 )
@@ -25,6 +28,7 @@ from mcp_server.tools.ui import (
 )
 
 DEFAULT_MAX_PAYLOAD_CHARS = 4000
+logger = logging.getLogger(__name__)
 
 
 class ServerRuntime:
@@ -73,10 +77,14 @@ async def build_and_deploy(clean: bool = False, variant: str = "debug") -> dict[
         variant=variant,
     )
     if "build_log_chunks" in result:
-        result["build_log_chunks"] = [
-            await runtime.summarize_large_payload(chunk, max_chars=DEFAULT_MAX_PAYLOAD_CHARS)
-            for chunk in result["build_log_chunks"]
-        ]
+        result["build_log_chunks"] = list(
+            await asyncio.gather(
+                *[
+                    runtime.summarize_large_payload(chunk, max_chars=DEFAULT_MAX_PAYLOAD_CHARS)
+                    for chunk in result["build_log_chunks"]
+                ]
+            )
+        )
     return result
 
 
@@ -134,7 +142,11 @@ def ide_evaluate(expression: str) -> dict[str, Any]:
 
 
 def run() -> None:
-    ensure_adb_reverse_on_startup()
+    if not ensure_adb_reverse_on_startup():
+        logger.warning(
+            "adb reverse tcp:%s was not configured on startup (expected if no device is connected); will retry during build_and_deploy.",
+            SDK_BRIDGE_PORT,
+        )
     mcp.run()
 
 

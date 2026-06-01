@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,7 +11,12 @@ from mcp_server.tools.system import _find_gradlew, _parse_first_connected_device
 
 DEFAULT_LOG_CHUNK_CHARS = 2000
 DEFAULT_MAX_LOG_CHUNKS = 30
+# Android commonly reserves user ids >=10 for secondary/private profiles.
 PRIVATE_SPACE_USER_ID = 10
+TRUNCATION_SUFFIX = "...(truncated)..."
+SDK_BRIDGE_PORT = 8080
+ERR_PRIVATE_SPACE_LOCKED_MARKER = "ERR_PRIVATE_SPACE_LOCKED"
+ERR_INSTALL_RESTRICTED_MARKER = "INSTALL_FAILED_USER_RESTRICTED"
 
 
 class AsyncLineReader(Protocol):
@@ -55,11 +61,18 @@ def _assemble_task(variant: str) -> str:
 
 
 def _split_chunks(lines: list[str], max_chars: int, max_chunks: int) -> list[str]:
+    if max_chars <= 0 or max_chunks <= 0:
+        return []
     chunks: list[str] = []
     current: list[str] = []
     current_size = 0
     for line in lines:
-        text = line if len(line) <= max_chars else f"{line[: max(0, max_chars - 16)]}...(truncated)..."
+        if len(line) <= max_chars:
+            text = line
+        elif max_chars <= len(TRUNCATION_SUFFIX):
+            text = line[:max_chars]
+        else:
+            text = f"{line[: max_chars - len(TRUNCATION_SUFFIX)]}{TRUNCATION_SUFFIX}"
         next_size = current_size + len(text) + (1 if current else 0)
         if current and next_size > max_chars:
             chunks.append("\n".join(current))
@@ -73,8 +86,11 @@ def _split_chunks(lines: list[str], max_chars: int, max_chunks: int) -> list[str
 
     if len(chunks) <= max_chunks:
         return chunks
+    if max_chunks == 1:
+        return [chunks[0]]
     head = chunks[: max_chunks // 2]
-    tail = chunks[-(max_chunks - len(head) - 1) :]
+    tail_count = max_chunks - len(head) - 1
+    tail = chunks[-tail_count:] if tail_count > 0 else []
     return [*head, "...(truncated log chunks)...", *tail]
 
 
@@ -86,7 +102,7 @@ async def _read_lines(stream: AsyncLineReader | None) -> list[str]:
         raw = await stream.readline()
         if not raw:
             break
-        lines.append(raw.decode(errors='replace').rstrip())
+        lines.append(raw.decode(errors="replace").rstrip())
     return lines
 
 
@@ -125,22 +141,35 @@ def _find_apk(project_root: Path, variant: str) -> Path | None:
 
 
 def _is_private_space_locked(stderr: str, stdout: str) -> bool:
-    combined = f"{stdout}\n{stderr}".lower()
-    return "err_private_space_locked" in combined or "install_failed_user_restricted" in combined
+    combined = _combine_output(stdout=stdout, stderr=stderr).lower()
+    return ERR_PRIVATE_SPACE_LOCKED_MARKER.lower() in combined or ERR_INSTALL_RESTRICTED_MARKER.lower() in combined
+
+
+def _combine_output(stdout: str, stderr: str) -> str:
+    return f"{stdout}\n{stderr}"
+
+
+def _detect_private_user_id(dumpsys_output: str) -> int | None:
+    candidates = {int(match) for match in re.findall(r"UserInfo\{(\d+):", dumpsys_output)}
+    candidates.update(int(match) for match in re.findall(r"serialNo=(\d+)", dumpsys_output))
+    private_users = sorted(user_id for user_id in candidates if user_id >= PRIVATE_SPACE_USER_ID)
+    if private_users:
+        return private_users[0]
+    return None
 
 
 async def _ensure_adb_reverse(context: BuildContext, serial: str | None = None) -> CommandResult:
     command = [context.adb_path]
     if serial:
         command.extend(["-s", serial])
-    command.extend(["reverse", "tcp:8080", "tcp:8080"])
+    command.extend(["reverse", f"tcp:{SDK_BRIDGE_PORT}", f"tcp:{SDK_BRIDGE_PORT}"])
     return await _run_command(context, command)
 
 
 def ensure_adb_reverse_on_startup(adb_path: str = "adb") -> bool:
     try:
         subprocess.run(
-            [adb_path, "reverse", "tcp:8080", "tcp:8080"],
+            [adb_path, "reverse", f"tcp:{SDK_BRIDGE_PORT}", f"tcp:{SDK_BRIDGE_PORT}"],
             check=True,
             text=True,
             capture_output=True,
@@ -211,9 +240,11 @@ async def build_and_deploy(
 
     if install_result.returncode != 0 and _is_private_space_locked(install_result.stderr, install_result.stdout):
         dumpsys = await _run_command(ctx, [ctx.adb_path, "-s", serial, "shell", "dumpsys", "user"])
-        if _private_space_detected(f"{dumpsys.stdout}\n{dumpsys.stderr}"):
+        dumpsys_output = _combine_output(stdout=dumpsys.stdout, stderr=dumpsys.stderr)
+        if _private_space_detected(dumpsys_output):
             private_space_retry = True
-            retry_cmd = [ctx.adb_path, "-s", serial, "install", "-r", "--user", str(PRIVATE_SPACE_USER_ID), str(apk_path)]
+            private_user_id = _detect_private_user_id(dumpsys_output) or PRIVATE_SPACE_USER_ID
+            retry_cmd = [ctx.adb_path, "-s", serial, "install", "-r", "--user", str(private_user_id), str(apk_path)]
             install_result = await _run_command(ctx, retry_cmd)
             if install_result.returncode != 0:
                 return {

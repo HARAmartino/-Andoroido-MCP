@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from mcp_server.tools.build import BuildContext, build_and_deploy
+from mcp_server.tools.build import BuildContext, _split_chunks, build_and_deploy
 
 
 class FakeStream:
@@ -89,6 +89,7 @@ async def test_build_and_deploy_success_streams_and_reverses(tmp_path: Path) -> 
     assert result["status"] == "success"
     assert result["apk_path"] == str(apk_path)
     assert len(result["build_log_chunks"]) >= 2
+    assert any("BUILD SUCCESSFUL" in chunk for chunk in result["build_log_chunks"])
     assert result["adb_reverse"]["status"] == "ok"
     assert ("adb", "-s", device, "reverse", "tcp:8080", "tcp:8080") in factory.calls
 
@@ -135,3 +136,11 @@ async def test_build_and_deploy_handles_private_space_locked(tmp_path: Path) -> 
 
     assert result["status"] == "error"
     assert result["error_code"] == "ERR_PRIVATE_SPACE_LOCKED"
+
+
+def test_split_chunks_truncates_when_exceeding_limit() -> None:
+    lines = [f"line-{i}" for i in range(10)]
+    chunks = _split_chunks(lines=lines, max_chars=6, max_chunks=3)
+
+    assert len(chunks) == 3
+    assert chunks[1] == "...(truncated log chunks)..."

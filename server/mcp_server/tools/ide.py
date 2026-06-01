@@ -21,7 +21,7 @@ class MockIDEBridge:
         return breakpoint_id
 
     def evaluate(self, expression: str) -> str:
-        return f"[mock-debugger] expression '{expression}' cannot be evaluated because debugger is not paused."
+        return f"[mock-debugger] Cannot evaluate '{expression}' in mock mode. Connect a real IDE debugger bridge."
 
 
 _mock_bridge = MockIDEBridge(breakpoints=[])
