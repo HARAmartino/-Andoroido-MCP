@@ -78,7 +78,7 @@ def _split_chunks(lines: list[str], max_chars: int, max_chunks: int) -> list[str
     return [*head, "...(truncated log chunks)...", *tail]
 
 
-async def _read_lines(stream: AsyncLineReader | None, prefix: str) -> list[str]:
+async def _read_lines(stream: AsyncLineReader | None) -> list[str]:
     if stream is None:
         return []
     lines: list[str] = []
@@ -86,7 +86,7 @@ async def _read_lines(stream: AsyncLineReader | None, prefix: str) -> list[str]:
         raw = await stream.readline()
         if not raw:
             break
-        lines.append(f"{prefix}{raw.decode(errors='replace').rstrip()}")
+        lines.append(raw.decode(errors='replace').rstrip())
     return lines
 
 
@@ -101,8 +101,8 @@ async def _run_command(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout_lines_task = asyncio.create_task(_read_lines(process.stdout, "stdout> "))
-    stderr_lines_task = asyncio.create_task(_read_lines(process.stderr, "stderr> "))
+    stdout_lines_task = asyncio.create_task(_read_lines(process.stdout))
+    stderr_lines_task = asyncio.create_task(_read_lines(process.stderr))
     returncode = await process.wait()
     stdout_lines = await stdout_lines_task
     stderr_lines = await stderr_lines_task
