@@ -24,15 +24,11 @@ android {
 }
 
 dependencies {
-    // OkHttp for network interception
+    // OkHttp for network interception (includes WebSocket support)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // WebSocket support (bundled in OkHttp)
     // Kotlin coroutines for async operations on the Foreground Service
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
-    // Gson for JSON-RPC 2.0 message serialisation
-    implementation("com.google.code.gson:gson:2.11.0")
 
     // Lifecycle / ViewModel (provided by the host app; compileOnly avoids bundling)
     compileOnly("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")

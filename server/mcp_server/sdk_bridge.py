@@ -155,7 +155,8 @@ class SDKBridge:
             vm_name = params.get("viewmodel", "unknown")
             self._viewmodel_states[vm_name] = params.get("state", {})
         else:
-            logger.debug("sdk_bridge: unknown method %r", method)
+            # Do not log the raw method string – it originates from untrusted input.
+            logger.debug("sdk_bridge: received message with unrecognised method")
 
     # ------------------------------------------------------------------
     # WebSocket server

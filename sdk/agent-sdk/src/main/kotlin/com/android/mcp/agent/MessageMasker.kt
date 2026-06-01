@@ -26,10 +26,11 @@ object MessageMasker {
     private const val MASK = "***MASKED***"
 
     private val RULES: List<Pair<Pattern, String>> = listOf(
+        // Preserve "Authorization: Bearer " prefix; mask only the token value.
         Pattern.compile(
             """(Authorization:\s*Bearer\s+)\S+""",
             Pattern.CASE_INSENSITIVE,
-        ) to "Authorization: $MASK",
+        ) to "\$1$MASK",
 
         Pattern.compile(
             """"password"\s*:\s*"[^"]*"""",

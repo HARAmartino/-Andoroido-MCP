@@ -32,7 +32,26 @@ class NetworkInterceptor(private val bridge: SdkBridgeClient) : Interceptor {
         val request = chain.request()
         val startMs = System.currentTimeMillis()
 
-        val response = chain.proceed(request)
+        // Buffer the request body BEFORE proceeding – OkHttp bodies are one-shot
+        // and would be empty after chain.proceed() consumes them.
+        val reqBodyString = try {
+            val buffer = okio.Buffer()
+            request.body?.writeTo(buffer)
+            buffer.readUtf8()
+        } catch (_: Exception) {
+            ""
+        }
+
+        // Rebuild the request so the original body is still sent downstream.
+        val forwardRequest = if (request.body != null && reqBodyString.isNotEmpty()) {
+            request.newBuilder()
+                .method(request.method, okhttp3.RequestBody.create(request.body!!.contentType(), reqBodyString))
+                .build()
+        } else {
+            request
+        }
+
+        val response = chain.proceed(forwardRequest)
 
         val latencyMs = System.currentTimeMillis() - startMs
 
@@ -40,7 +59,7 @@ class NetworkInterceptor(private val bridge: SdkBridgeClient) : Interceptor {
             // Snapshot the response body without consuming it (peek).
             val responseBodyString = response.peekBody(MAX_BODY_BYTES).string()
 
-            val event = buildEvent(request, response, responseBodyString, latencyMs)
+            val event = buildEvent(request, reqBodyString, response, responseBodyString, latencyMs)
             if (!bridge.send(event)) {
                 Log.d(tag, "Bridge not connected – network trace dropped")
             }
@@ -57,6 +76,7 @@ class NetworkInterceptor(private val bridge: SdkBridgeClient) : Interceptor {
 
     private fun buildEvent(
         request: okhttp3.Request,
+        requestBody: String,
         response: Response,
         responseBody: String,
         latencyMs: Long,
@@ -66,19 +86,11 @@ class NetworkInterceptor(private val bridge: SdkBridgeClient) : Interceptor {
             reqHeaders.put(name, request.headers[name] ?: "")
         }
 
-        val reqBody = try {
-            val buffer = okio.Buffer()
-            request.body?.writeTo(buffer)
-            buffer.readUtf8()
-        } catch (_: Exception) {
-            ""
-        }
-
         val reqObj = JSONObject().apply {
             put("method", request.method)
             put("url", request.url.toString())
             put("headers", reqHeaders)
-            put("body", tryParseJson(reqBody))
+            put("body", tryParseJson(requestBody))
         }
 
         val resObj = JSONObject().apply {
@@ -98,12 +110,19 @@ class NetworkInterceptor(private val bridge: SdkBridgeClient) : Interceptor {
         }
     }
 
-    private fun tryParseJson(text: String): Any =
-        try {
-            JSONObject(text)
-        } catch (_: Exception) {
-            text
+    /**
+     * Attempt to parse [text] as a JSON object or array; fall back to the raw string.
+     * Handles both `{}` (object) and `[]` (array) root values.
+     */
+    private fun tryParseJson(text: String): Any {
+        if (text.isBlank()) return text
+        val trimmed = text.trimStart()
+        return when {
+            trimmed.startsWith('{') -> try { JSONObject(text) } catch (_: Exception) { text }
+            trimmed.startsWith('[') -> try { org.json.JSONArray(text) } catch (_: Exception) { text }
+            else -> text
         }
+    }
 
     companion object {
         /** Maximum response body bytes to snapshot (avoids OOM on large downloads). */
