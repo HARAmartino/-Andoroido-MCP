@@ -1,0 +1,2 @@
+[console_scripts]
+android-debugger-mcp = mcp_server.main:run
