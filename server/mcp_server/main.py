@@ -5,6 +5,9 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from mcp_server.sdk_bridge import bridge
+from mcp_server.tools.network import NetworkContext, inspect_network as run_inspect_network
+from mcp_server.tools.state import StateContext, dump_viewmodel as run_dump_viewmodel
 from mcp_server.tools.system import DoctorContext, doctor as run_doctor
 from mcp_server.tools.ui import (
     ActionType,
@@ -73,6 +76,26 @@ def interact_and_observe(
 def get_ui_tree(format: UIFormat = "summary") -> dict[str, Any]:
     """Retrieve current accessibility tree in summary/json/xml format."""
     return run_get_ui_tree(context=_default_ui_context(), format=format)
+
+
+@mcp.tool()
+def inspect_network(filter: str | None = None) -> dict[str, Any]:
+    """Return recent HTTP traffic intercepted by the Agent SDK.
+
+    Requires the Android Agent SDK to be connected via ``adb reverse tcp:8080 tcp:8080``.
+    All sensitive fields (Authorization, password, token, credit_card) are automatically
+    masked before being returned.
+    """
+    return run_inspect_network(context=NetworkContext(gateway=bridge), filter=filter)
+
+
+@mcp.tool()
+def dump_viewmodel(class_name: str | None = None) -> dict[str, Any]:
+    """Dump the internal StateFlow/LiveData state of active ViewModels from the Agent SDK.
+
+    Requires the Android Agent SDK to be connected via ``adb reverse tcp:8080 tcp:8080``.
+    """
+    return run_dump_viewmodel(context=StateContext(gateway=bridge), class_name=class_name)
 
 
 def run() -> None:

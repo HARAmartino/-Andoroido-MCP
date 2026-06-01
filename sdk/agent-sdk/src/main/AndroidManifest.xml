@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        INTERNET is required to open the WebSocket connection to the MCP Server
+        (tunnelled through `adb reverse tcp:8080 tcp:8080`).
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+        FOREGROUND_SERVICE is required on Android 9+ to start a foreground service.
+        FOREGROUND_SERVICE_DATA_SYNC is the correct type for a persistent data-relay
+        service on Android 14+ (API 34+).
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- POST_NOTIFICATIONS is needed on Android 13+ to show the persistent notification. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <service
+            android:name=".AgentService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+
+</manifest>
