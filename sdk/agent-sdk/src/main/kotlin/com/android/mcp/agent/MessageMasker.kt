@@ -12,7 +12,7 @@ import java.util.regex.Pattern
  * ### Masking rules
  * | Pattern | Replacement |
  * |---------|-------------|
- * | `Authorization: ****** | `Authorization: ***MASKED***` |
+ * | `Authorization: <value>` (any scheme) | `Authorization: ***MASKED***` |
  * | `"password": "<value>"` | `"password": "***MASKED***"` |
  * | `"token": "<value>"` | `"token": "***MASKED***"` |
  * | `"credit_card": "<value>"` | `"credit_card": "***MASKED***"` |
@@ -26,9 +26,10 @@ object MessageMasker {
     private const val MASK = "***MASKED***"
 
     private val RULES: List<Pair<Pattern, String>> = listOf(
-        // Preserve "Authorization: Bearer " prefix; mask only the token value.
+        // Mask any Authorization header value regardless of scheme (Basic, Bearer, Digest, …).
+        // This aligns with the Python server-side behaviour which masks the entire header value.
         Pattern.compile(
-            """(Authorization:\s*Bearer\s+)\S+""",
+            """(Authorization\s*:\s*)\S+""",
             Pattern.CASE_INSENSITIVE,
         ) to "\$1$MASK",
 

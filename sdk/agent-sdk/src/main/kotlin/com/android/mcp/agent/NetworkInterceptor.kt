@@ -34,22 +34,8 @@ class NetworkInterceptor(private val bridge: SdkBridgeClient) : Interceptor {
 
         // Buffer the request body BEFORE proceeding – OkHttp bodies are one-shot
         // and would be empty after chain.proceed() consumes them.
-        val reqBodyString = try {
-            val buffer = okio.Buffer()
-            request.body?.writeTo(buffer)
-            buffer.readUtf8()
-        } catch (_: Exception) {
-            ""
-        }
-
-        // Rebuild the request so the original body is still sent downstream.
-        val forwardRequest = if (request.body != null && reqBodyString.isNotEmpty()) {
-            request.newBuilder()
-                .method(request.method, okhttp3.RequestBody.create(request.body!!.contentType(), reqBodyString))
-                .build()
-        } else {
-            request
-        }
+        // One-shot bodies (e.g. streaming uploads) are skipped to avoid corrupting the request.
+        val (reqBodyString, forwardRequest) = bufferRequestBody(request)
 
         val response = chain.proceed(forwardRequest)
 
@@ -68,6 +54,32 @@ class NetworkInterceptor(private val bridge: SdkBridgeClient) : Interceptor {
         }
 
         return response
+    }
+
+    /**
+     * Attempt to buffer [request]'s body so it can be both inspected and forwarded.
+     * Returns a pair of (buffered body text, rebuilt request with fresh body).
+     *
+     * Falls back to (empty string, original request) when:
+     * - the request has no body,
+     * - the body is one-shot (streaming), or
+     * - buffering throws an exception.
+     */
+    private fun bufferRequestBody(request: okhttp3.Request): Pair<String, okhttp3.Request> {
+        val body = request.body ?: return Pair("", request)
+        if (body.isOneShot()) return Pair("", request)
+
+        return try {
+            val buffer = okio.Buffer()
+            body.writeTo(buffer)
+            val bodyString = buffer.readUtf8()
+            val newBody = okhttp3.RequestBody.create(body.contentType(), bodyString)
+            Pair(bodyString, request.newBuilder().method(request.method, newBody).build())
+        } catch (e: Exception) {
+            Log.w(tag, "Failed to buffer request body: ${e.message}")
+            // The original body was consumed; proceed with an empty body to avoid hanging.
+            Pair("", request)
+        }
     }
 
     // ------------------------------------------------------------------

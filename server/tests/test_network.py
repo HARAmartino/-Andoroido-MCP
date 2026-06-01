@@ -22,7 +22,7 @@ def test_inspect_network_trace_structure(network_context: NetworkContext) -> Non
     assert "request" in trace
     assert "response" in trace
     assert trace["request"]["method"] == "POST"
-    assert "api.example.com" in trace["request"]["url"]
+    assert trace["request"]["url"] == "https://api.example.com/login"
 
 
 def test_inspect_network_filter_by_url(network_context: NetworkContext) -> None:
