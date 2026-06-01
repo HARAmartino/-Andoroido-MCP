@@ -6,6 +6,13 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from mcp_server.sdk_bridge import bridge
+from mcp_server.tools.build import (
+    BuildContext,
+    build_and_deploy as run_build_and_deploy,
+    ensure_adb_reverse_on_startup,
+)
+from mcp_server.tools.ide import ide_evaluate as run_ide_evaluate
+from mcp_server.tools.ide import ide_set_breakpoint as run_ide_set_breakpoint
 from mcp_server.tools.network import NetworkContext, inspect_network as run_inspect_network
 from mcp_server.tools.state import StateContext, dump_viewmodel as run_dump_viewmodel
 from mcp_server.tools.system import DoctorContext, doctor as run_doctor
@@ -58,6 +65,22 @@ def doctor() -> str:
 
 
 @mcp.tool()
+async def build_and_deploy(clean: bool = False, variant: str = "debug") -> dict[str, Any]:
+    """Build app via Gradle, install APK via adb, and auto-configure adb reverse."""
+    result = await run_build_and_deploy(
+        context=BuildContext(roots_provider=runtime.get_roots),
+        clean=clean,
+        variant=variant,
+    )
+    if "build_log_chunks" in result:
+        result["build_log_chunks"] = [
+            await runtime.summarize_large_payload(chunk, max_chars=DEFAULT_MAX_PAYLOAD_CHARS)
+            for chunk in result["build_log_chunks"]
+        ]
+    return result
+
+
+@mcp.tool()
 def interact_and_observe(
     action: ActionType,
     selector: str,
@@ -98,7 +121,20 @@ def dump_viewmodel(class_name: str | None = None) -> dict[str, Any]:
     return run_dump_viewmodel(context=StateContext(gateway=bridge), class_name=class_name)
 
 
+@mcp.tool()
+def ide_set_breakpoint(file_path: str, line: int, condition: str | None = None) -> dict[str, Any]:
+    """Set breakpoint through IDE bridge (mock bridge in this phase)."""
+    return run_ide_set_breakpoint(file_path=file_path, line=line, condition=condition)
+
+
+@mcp.tool()
+def ide_evaluate(expression: str) -> dict[str, Any]:
+    """Evaluate expression through IDE bridge (mock bridge in this phase)."""
+    return run_ide_evaluate(expression=expression)
+
+
 def run() -> None:
+    ensure_adb_reverse_on_startup()
     mcp.run()
 
 
