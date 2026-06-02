@@ -1,6 +1,7 @@
 """Tests for :mod:`mcp_server.sdk_bridge`."""
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -187,3 +188,26 @@ class TestSDKBridgeHandleMessage:
             "params": {"viewmodel": "VM", "state": {"count": 2}},
         }))
         assert bridge.get_viewmodel_states()["VM"]["count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_wait_for_event_succeeds_when_event_arrives(self) -> None:
+        bridge = self._make_bridge()
+
+        async def emit_later() -> None:
+            await asyncio.sleep(0.01)
+            bridge.handle_message(json.dumps({
+                "jsonrpc": "2.0",
+                "method": "telemetry/event",
+                "params": {"event": "SDK_CONNECTED"},
+            }))
+
+        task = asyncio.create_task(emit_later())
+        try:
+            assert await bridge.wait_for_event("SDK_CONNECTED", timeout_sec=0.5) is True
+        finally:
+            await task
+
+    @pytest.mark.asyncio
+    async def test_wait_for_event_times_out(self) -> None:
+        bridge = self._make_bridge()
+        assert await bridge.wait_for_event("SDK_CONNECTED", timeout_sec=0.01) is False

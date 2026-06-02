@@ -170,7 +170,11 @@ def get_crash_context() -> dict[str, Any]:
 
 
 @mcp.tool()
-def start_fuzzing(duration_sec: int, strategy: FuzzStrategy = "random") -> dict[str, Any]:
+def start_fuzzing(
+    duration_sec: int,
+    strategy: FuzzStrategy = "random",
+    target_selector: str | None = None,
+) -> dict[str, Any]:
     """Run autonomous UI fuzzing and stop immediately on crash/ANR."""
     ui_context = _default_ui_context()
     return run_start_fuzzing(
@@ -186,6 +190,7 @@ def start_fuzzing(duration_sec: int, strategy: FuzzStrategy = "random") -> dict[
         ),
         duration_sec=duration_sec,
         strategy=strategy,
+        target_selector=target_selector,
     )
 
 
