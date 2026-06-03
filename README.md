@@ -63,16 +63,15 @@ graph TD
 *   *(Optional)* **Android Studio** running for IDE integration features.
 
 ### 2. Install the Server
-You can run the server directly using `uvx` (recommended) or install it via pip.
+You can run the server directly using `uvx` (recommended) or install it in editable mode.
 
 ```bash
 # Using uv (Fast Python package installer)
-uvx android-deep-debugger-mcp
+uvx android-deep-debugger-mcp-server
 
-# OR clone and install for development
-git clone https://github.com/your-repo/android-deep-debugger-mcp.git
-cd android-deep-debugger-mcp
-pip install -e .
+# OR install from this repository for development
+cd server
+python -m pip install -e .
 ```
 
 ### 3. Configure MCP Client
@@ -85,10 +84,35 @@ Add the server configuration to your AI client (Claude Desktop, Cursor, Cline, e
   "mcpServers": {
     "android-deep-debugger": {
       "command": "uvx",
-      "args": ["android-deep-debugger-mcp"],
+      "args": ["android-deep-debugger-mcp-server"],
       "env": {
         "ANDROID_HOME": "/path/to/your/android/sdk"
       }
+    }
+  }
+}
+```
+
+**Cursor (`.cursor/mcp.json`)**
+```json
+{
+  "mcpServers": {
+    "android-deep-debugger": {
+      "command": "python",
+      "args": ["-m", "mcp_server.main"],
+      "cwd": "/absolute/path/to/-Andoroido-MCP/server"
+    }
+  }
+}
+```
+
+**Cline (`cline_mcp_settings.json`)**
+```json
+{
+  "mcpServers": {
+    "android-deep-debugger": {
+      "command": "uvx",
+      "args": ["android-deep-debugger-mcp-server"]
     }
   }
 }
@@ -107,12 +131,32 @@ To unlock **Deep Inspection** features (Network, ViewModel, DB), you must embed 
     ```
 2.  **Initialize**:
     ```kotlin
-    // In your Application class or Main Activity
+    // In your Application class (debug builds)
     if (BuildConfig.DEBUG) {
-        AgentSDK.init(this)
+        AgentService.start(this)
     }
     ```
 3.  **Connect**: The SDK automatically connects to the MCP Server via `adb reverse` when the app starts.
+
+---
+
+## 🧪 Demo App + E2E Verification
+
+The repository includes a minimal debug harness app at `sdk/demo-app`:
+- `Crash Button` (`btn_crash`) intentionally throws an NPE.
+- `Network Button` (`btn_network`) triggers a mock API call with `NetworkInterceptor`.
+- Debug/release build types are configured with the debug signing key for local test deploys.
+
+Run the Phase-5 E2E flow on an emulator/device:
+```bash
+python tests/e2e_test.py
+```
+
+The script verifies:
+1. `build_and_deploy` succeeds for `sdk/demo-app`.
+2. SDK bridge emits `SDK_CONNECTED` after app launch.
+3. `start_fuzzing(..., target_selector=\"btn_crash\")` stops on crash and returns stack/network context.
+4. `generate_bug_report` returns valid Markdown with masked sensitive fields.
 
 ---
 
@@ -155,6 +199,29 @@ If you are an AI Agent reading this: **Please read `AGENTS.md` first.** It conta
 **Human Developers**:
 We use a Git Hook system to sync `AGENTS.md` to `.github/copilot-instructions.md`.
 Run `bash setup-hooks.sh` after cloning to enable automatic synchronization.
+
+---
+
+## 🛟 Troubleshooting
+
+- **`adb reverse` fails / no telemetry**
+  - Ensure a device is listed in `adb devices`.
+  - Re-run: `adb reverse tcp:8080 tcp:8080`.
+  - Relaunch the app so the SDK reconnects.
+
+- **SDK not connected (`SDKNotConnected`)**
+  - Confirm the demo app (or host app with `AgentService`) is running in foreground.
+  - Check that port `8080` is not blocked by another local process.
+  - Verify MCP server and app are using the same bridge URL (`ws://127.0.0.1:8080`).
+
+- **WebSocket disconnects repeatedly**
+  - Keep USB debugging enabled (or emulator active).
+  - Reconnect device, then restart MCP server and app.
+  - Inspect `adb logcat | grep SdkBridgeClient` for connection failures.
+
+- **Build installs but app does not launch**
+  - Use debug variant (`variant=\"debug\"`) and verify package name.
+  - Run: `adb shell monkey -p com.android.mcp.demo -c android.intent.category.LAUNCHER 1`.
 
 ---
 

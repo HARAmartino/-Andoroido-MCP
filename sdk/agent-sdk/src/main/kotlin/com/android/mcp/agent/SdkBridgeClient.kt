@@ -93,6 +93,15 @@ class SdkBridgeClient(private val url: String) {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 socketRef.set(webSocket)
                 isConnected = true
+                send(
+                    JSONObject().apply {
+                        put("jsonrpc", "2.0")
+                        put("method", "telemetry/event")
+                        put("params", JSONObject().apply {
+                            put("event", "SDK_CONNECTED")
+                        })
+                    },
+                )
                 Log.i(tag, "WebSocket connected to $url")
             }
 

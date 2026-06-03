@@ -113,6 +113,7 @@ def start_fuzzing(
     context: FuzzContext,
     duration_sec: int,
     strategy: FuzzStrategy = "random",
+    target_selector: str | None = None,
 ) -> dict[str, Any]:
     """Run random/guided actions and stop immediately when crash/ANR is observed."""
     if duration_sec <= 0:
@@ -122,6 +123,36 @@ def start_fuzzing(
 
     deadline = context.clock() + duration_sec
     iterations = 0
+
+    if target_selector:
+        try:
+            _run_action(context.device, "click", target_selector)
+            action_status = "success"
+        except RuntimeError:
+            action_status = "failure"
+
+        if context.record_action:
+            context.record_action(
+                {
+                    "tool": "start_fuzzing",
+                    "action": "click",
+                    "selector": target_selector,
+                    "status": action_status,
+                }
+            )
+
+        iterations += 1
+        logs = context.device.get_recent_logs(window_ms=context.recent_log_window_ms)
+        if contains_crash_signature(logs):
+            crash = get_crash_context(context.crash_context, log_lines=logs)
+            crash["status"] = "stopped_on_crash"
+            crash["fuzzing"] = {
+                "status": "stopped_on_crash",
+                "iterations": iterations,
+                "strategy": strategy,
+                "target_selector": target_selector,
+            }
+            return crash
 
     while context.clock() < deadline:
         selectors = _candidate_selectors(context.device.dump_hierarchy())
@@ -148,10 +179,12 @@ def start_fuzzing(
         logs = context.device.get_recent_logs(window_ms=context.recent_log_window_ms)
         if contains_crash_signature(logs):
             crash = get_crash_context(context.crash_context, log_lines=logs)
+            crash["status"] = "stopped_on_crash"
             crash["fuzzing"] = {
                 "status": "stopped_on_crash",
                 "iterations": iterations,
                 "strategy": strategy,
+                "target_selector": target_selector,
             }
             return crash
 

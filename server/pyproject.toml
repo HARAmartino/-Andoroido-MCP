@@ -4,10 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "android-deep-debugger-mcp-server"
-version = "0.1.0"
+version = "1.0.0"
 description = "Universal Android Deep Debugger MCP Server"
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+  {name = "Universal Android Deep Debugger Contributors"}
+]
+keywords = ["mcp", "android", "debugger", "ai-agent", "uiautomator2"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Debuggers",
+]
 dependencies = [
   "mcp[cli]",
   "pydantic>=2,<3",
@@ -16,6 +30,11 @@ dependencies = [
   "pytest-asyncio",
   "websockets",
 ]
+
+[project.urls]
+Homepage = "https://github.com/HARAmartino/-Andoroido-MCP"
+Repository = "https://github.com/HARAmartino/-Andoroido-MCP"
+Issues = "https://github.com/HARAmartino/-Andoroido-MCP/issues"
 
 [project.scripts]
 android-debugger-mcp = "mcp_server.main:run"

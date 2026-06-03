@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">MCP Demo App</string>
+    <string name="crash_button">Crash Button</string>
+    <string name="network_button">Network Button</string>
+    <string name="status_ready">Ready</string>
+    <string name="network_running">Running mock API call…</string>
+</resources>

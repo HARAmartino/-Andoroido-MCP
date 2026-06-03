@@ -90,6 +90,8 @@ class SDKBridge:
         default_factory=lambda: deque(maxlen=MAX_NETWORK_TRACES)
     )
     _viewmodel_states: dict[str, dict[str, Any]] = field(default_factory=dict)
+    _events: deque[str] = field(default_factory=lambda: deque(maxlen=100))
+    _event_waiters: dict[str, list[asyncio.Future[bool]]] = field(default_factory=dict)
     _connected: bool = False
 
     # ------------------------------------------------------------------
@@ -128,6 +130,34 @@ class SDKBridge:
     def is_connected(self) -> bool:
         return self._connected
 
+    def pop_events(self) -> list[str]:
+        events = list(self._events)
+        self._events.clear()
+        return events
+
+    async def wait_for_event(self, event_name: str, timeout_sec: float = 30.0) -> bool:
+        if event_name in self._events:
+            return True
+        loop = asyncio.get_running_loop()
+        waiter: asyncio.Future[bool] = loop.create_future()
+        self._event_waiters.setdefault(event_name, []).append(waiter)
+        try:
+            return await asyncio.wait_for(waiter, timeout=timeout_sec)
+        except asyncio.TimeoutError:
+            return False
+        finally:
+            waiters = self._event_waiters.get(event_name, [])
+            if waiter in waiters:
+                waiters.remove(waiter)
+            if not waiters:
+                self._event_waiters.pop(event_name, None)
+
+    def _emit_event(self, event_name: str) -> None:
+        self._events.append(event_name)
+        for waiter in self._event_waiters.pop(event_name, []):
+            if not waiter.done():
+                waiter.set_result(True)
+
     # ------------------------------------------------------------------
     # Internal message handling
     # ------------------------------------------------------------------
@@ -154,6 +184,10 @@ class SDKBridge:
         elif method == "telemetry/state":
             vm_name = params.get("viewmodel", "unknown")
             self._viewmodel_states[vm_name] = params.get("state", {})
+        elif method == "telemetry/event":
+            event_name = str(params.get("event", "")).strip()
+            if event_name:
+                self._emit_event(event_name)
         else:
             # Do not log the raw method string – it originates from untrusted input.
             logger.debug("sdk_bridge: received message with unrecognised method")
@@ -164,6 +198,7 @@ class SDKBridge:
 
     async def _handle_ws_client(self, websocket: Any) -> None:  # noqa: ANN401
         self._connected = True
+        self._emit_event("SDK_CONNECTED")
         logger.info("sdk_bridge: SDK client connected")
         try:
             async for message in websocket:
@@ -174,6 +209,7 @@ class SDKBridge:
             logger.warning("sdk_bridge: client error: %s", exc)
         finally:
             self._connected = False
+            self._emit_event("SDK_DISCONNECTED")
             logger.info("sdk_bridge: SDK client disconnected")
 
     async def serve(self, host: str = "127.0.0.1", port: int = 8080) -> None:
