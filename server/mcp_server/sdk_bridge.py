@@ -29,6 +29,10 @@ _STRING_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r'"password"\s*:\s*"[^"]*"'), f'"password": "{_MASK}"'),
     (re.compile(r'"token"\s*:\s*"[^"]*"'), f'"token": "{_MASK}"'),
     (re.compile(r'"credit_card"\s*:\s*"[^"]*"'), f'"credit_card": "{_MASK}"'),
+    # Plain-text credit-card number pattern (13–19 digits optionally separated by
+    # spaces, hyphens, or dots).  Applied to raw text so that UI-tree summaries and
+    # logcat snippets don't expose card numbers captured from on-screen fields.
+    (re.compile(r"\b(\d{4})[\s\-.](\d{4})[\s\-.](\d{4})[\s\-.](\d{4,7})\b"), _MASK),
 ]
 
 # Keys whose string values should always be masked when encountered in a parsed dict.

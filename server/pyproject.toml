@@ -46,3 +46,8 @@ include = ["mcp_server*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Default run excludes real-device tests; use `pytest -m e2e` to include them.
+addopts = "-m 'not e2e'"
+markers = [
+  "e2e: real Android device required (deselected by default)",
+]

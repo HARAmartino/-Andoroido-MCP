@@ -1,6 +1,0 @@
-mcp[cli]
-pydantic<3,>=2
-uiautomator2
-pytest
-pytest-asyncio
-websockets
