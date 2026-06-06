@@ -123,6 +123,15 @@ class MockDevice:
         _ = window_ms
         return list(self.logs)
 
+    def screenshot(self) -> bytes:
+        # Minimal valid 2x1 PNG so capture_screenshot/_downscale_png can run in tests.
+        import base64
+
+        return base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEklEQVR4nGP8z8DwnwEJMOIWAAA"
+            "Q/AH+f8KOXAAAAABJRU5ErkJggg=="
+        )
+
     def _ensure_element_present(self, selector: str) -> None:
         root = ET.fromstring(self.current_xml)
         for node in root.iter("node"):

@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# Build
+build/
+.gradle/

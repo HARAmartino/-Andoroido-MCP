@@ -27,6 +27,7 @@ from mcp_server.tools.ui import (
     ActionType,
     UIFormat,
     UIContext,
+    capture_screenshot as run_capture_screenshot,
     get_ui_tree as run_get_ui_tree,
     interact_and_observe as run_interact_and_observe,
 )
@@ -62,7 +63,13 @@ mcp = FastMCP("android-deep-debugger")
 def _default_ui_context() -> UIContext:
     import uiautomator2 as u2
 
-    device = u2.connect()
+    from mcp_server.device import UiAutomator2Adapter
+
+    raw = u2.connect()
+    # Wrap the raw uiautomator2 device so it satisfies the selector-string based
+    # DeviceClient protocol the tools expect (the raw device uses pixel
+    # coordinates and lacks input_text/scroll/get_recent_logs).
+    device = UiAutomator2Adapter(raw, serial=getattr(raw, "serial", None))
     return UIContext(device=device)
 
 
@@ -118,9 +125,31 @@ def interact_and_observe(
 
 
 @mcp.tool()
-def get_ui_tree(format: UIFormat = "summary") -> dict[str, Any]:
-    """Retrieve current accessibility tree in summary/json/xml format."""
+def get_ui_tree(format: UIFormat = "compact") -> dict[str, Any]:
+    """Retrieve current accessibility tree.
+
+    `compact` (default) returns only actionable/meaningful nodes (~80-95% fewer
+    tokens than `xml`); use `summary`/`xml`/`json` only when you need the full tree.
+    """
     return run_get_ui_tree(context=_default_ui_context(), format=format)
+
+
+@mcp.tool()
+def get_screenshot(max_width: int = 720):
+    """Visual fallback: a downscaled PNG of the current screen.
+
+    Use ONLY when the text tree (`get_ui_tree`) is insufficient — Compose/Canvas/
+    WebView/game screens with no semantics, or visual checks (color, layout,
+    image content). The text snapshot is far cheaper; prefer it by default.
+
+    PRIVACY: the image captures the screen verbatim (may contain PII) and cannot
+    be text-sanitized. Use it as ephemeral context only; never persist it into
+    reports or logs.
+    """
+    from mcp.server.fastmcp import Image
+
+    png = run_capture_screenshot(context=_default_ui_context(), max_width=max_width)
+    return Image(data=png, format="png")
 
 
 @mcp.tool()

@@ -23,6 +23,15 @@ SYSTEM_DIALOG_KEYWORDS: tuple[str, ...] = (
     "com.android",
     "android.permissioncontroller",
 )
+# Exact package names (or their namespace prefixes) that are always system-owned.
+# Checked against the node's `package` attribute to suppress bare text/content-desc
+# selectors from nodes that have no resource-id to filter on.
+_SYSTEM_PACKAGES: tuple[str, ...] = (
+    "com.android.systemui",
+    "com.android.settings",
+    "com.google.android.systemui",
+    "android",
+)
 # Guided strategy uses cumulative probabilities:
 # click: [0.00, 0.75), scroll: [0.75, 0.95), swipe: [0.95, 1.00].
 GUIDED_CLICK_PROB = 0.75
@@ -59,6 +68,16 @@ def _is_system_selector(value: str) -> bool:
     return any(keyword in lowered for keyword in SYSTEM_DIALOG_KEYWORDS)
 
 
+def _is_system_package(pkg: str) -> bool:
+    """Return True when *pkg* is a known Android system package namespace."""
+    return any(pkg == m or pkg.startswith(m + ".") for m in _SYSTEM_PACKAGES)
+
+
+def _clean_selector(value: str) -> str:
+    """Strip ASCII whitespace plus Unicode non-printable/zero-width chars."""
+    return "".join(ch for ch in value if ch.isprintable()).strip()
+
+
 def _candidate_selectors(xml_text: str) -> list[str]:
     selectors: list[str] = []
     try:
@@ -67,11 +86,29 @@ def _candidate_selectors(xml_text: str) -> list[str]:
         return selectors
 
     for node in root.iter("node"):
-        for key in ("resource-id", "text", "content-desc"):
-            value = node.attrib.get(key, "").strip()
+        # NAF="true" means the element is Not Accessibility Friendly; uiautomator2
+        # cannot reliably interact with it, so skip it entirely.
+        if node.attrib.get("NAF") == "true":
+            continue
+
+        pkg = node.attrib.get("package", "")
+        rid = _clean_selector(node.attrib.get("resource-id", ""))
+
+        # Always include non-system resource-ids (they're unambiguous selectors).
+        if rid and not _is_system_selector(rid):
+            selectors.append(rid)
+
+        # Include text / content-desc only when the host package is NOT a system
+        # package, preventing bare notification/status-bar text from leaking in.
+        if _is_system_package(pkg):
+            continue
+
+        for key in ("text", "content-desc"):
+            value = _clean_selector(node.attrib.get(key, ""))
             if not value or _is_system_selector(value):
                 continue
             selectors.append(value)
+
     return selectors
 
 
